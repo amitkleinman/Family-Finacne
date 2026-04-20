@@ -1,8 +1,7 @@
 import json, urllib.request, urllib.parse, os, logging
 from flask import Flask, request, jsonify, render_template, g
 from datetime import datetime
-import psycopg2
-import psycopg2.extras
+import pg8000.native
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -14,23 +13,36 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 _db_initialized = False
 
+def parse_db_url(url):
+    """Parse postgresql://user:pass@host:port/dbname"""
+    import urllib.parse as up
+    r = up.urlparse(url)
+    return {
+        "host": r.hostname,
+        "port": r.port or 5432,
+        "user": r.username,
+        "password": r.password,
+        "database": r.path.lstrip("/"),
+        "ssl_context": True
+    }
+
+def get_conn():
+    p = parse_db_url(DATABASE_URL)
+    return pg8000.native.Connection(**p)
+
 def init_db():
-    app.logger.info(f"Connecting to DB: {DATABASE_URL[:30]}...")
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS policies (
-            id SERIAL PRIMARY KEY, owner TEXT NOT NULL,
-            type TEXT NOT NULL, institute TEXT, policy_number TEXT,
-            start_month TEXT, fee REAL, amount REAL DEFAULT 0,
-            update_month TEXT, track TEXT,
-            created_at TEXT DEFAULT now()::text,
-            updated_at TEXT DEFAULT now()::text)""")
-    cur.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    cur.execute("INSERT INTO settings (key,value) VALUES ('owners',%s) ON CONFLICT (key) DO NOTHING",
-                (json.dumps(OWNERS),))
-    conn.commit()
-    cur.close()
+    app.logger.info(f"Connecting to DB...")
+    conn = get_conn()
+    conn.run("""CREATE TABLE IF NOT EXISTS policies (
+        id SERIAL PRIMARY KEY, owner TEXT NOT NULL,
+        type TEXT NOT NULL, institute TEXT, policy_number TEXT,
+        start_month TEXT, fee REAL, amount REAL DEFAULT 0,
+        update_month TEXT, track TEXT,
+        created_at TEXT DEFAULT now()::text,
+        updated_at TEXT DEFAULT now()::text)""")
+    conn.run("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    conn.run("INSERT INTO settings (key,value) VALUES (:k,:v) ON CONFLICT (key) DO NOTHING",
+             k='owners', v=json.dumps(OWNERS))
     conn.close()
     app.logger.info("DB initialized OK")
 
@@ -46,76 +58,70 @@ def ensure_db():
 
 def get_db():
     if "db" not in g:
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.autocommit = False
-        g.db = conn
+        g.db = get_conn()
     return g.db
 
 @app.teardown_appcontext
 def close_db(e=None):
     db = g.pop("db", None)
-    if db: db.close()
-
-def row_to_dict(row, cursor):
-    cols = [desc[0] for desc in cursor.description]
-    return dict(zip(cols, row))
-
-def rows_to_dicts(rows, cursor):
-    cols = [desc[0] for desc in cursor.description]
-    return [dict(zip(cols, r)) for r in rows]
+    if db:
+        try: db.close()
+        except: pass
 
 @app.route("/")
 def index(): return render_template("index.html")
 
 @app.route("/api/settings")
 def get_settings():
-    db = get_db(); cur = db.cursor()
-    cur.execute("SELECT value FROM settings WHERE key='owners'")
-    row = cur.fetchone(); cur.close()
-    return jsonify({"owners": json.loads(row[0]) if row else OWNERS})
+    db = get_db()
+    rows = db.run("SELECT value FROM settings WHERE key='owners'")
+    return jsonify({"owners": json.loads(rows[0][0]) if rows else OWNERS})
 
 @app.route("/api/settings/owners", methods=["PUT"])
 def update_owners():
-    db = get_db(); cur = db.cursor()
-    cur.execute("INSERT INTO settings (key,value) VALUES ('owners',%s) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
-               (json.dumps(request.json.get("owners", OWNERS)),))
-    db.commit(); cur.close()
+    db = get_db()
+    db.run("INSERT INTO settings (key,value) VALUES ('owners',:v) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",
+           v=json.dumps(request.json.get("owners", OWNERS)))
     return jsonify({"ok": True})
 
 @app.route("/api/policies")
 def get_policies():
-    db = get_db(); cur = db.cursor()
-    cur.execute("SELECT * FROM policies ORDER BY owner, type")
-    result = rows_to_dicts(cur.fetchall(), cur); cur.close()
-    return jsonify(result)
+    db = get_db()
+    rows = db.run("SELECT id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at FROM policies ORDER BY owner, type")
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
+    return jsonify([dict(zip(cols,r)) for r in rows])
 
 @app.route("/api/policies", methods=["POST"])
 def add_policy():
-    d = request.json; db = get_db(); cur = db.cursor()
-    cur.execute("""INSERT INTO policies (owner,type,institute,policy_number,start_month,fee,amount,update_month,track,updated_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
-        (d.get("owner"),d.get("type"),d.get("institute"),d.get("policy_number"),
-         d.get("start_month"),d.get("fee"),d.get("amount"),d.get("update_month"),
-         d.get("track"),datetime.now().isoformat()))
-    result = row_to_dict(cur.fetchone(), cur); db.commit(); cur.close()
-    return jsonify(result), 201
+    d = request.json
+    db = get_db()
+    rows = db.run("""INSERT INTO policies (owner,type,institute,policy_number,start_month,fee,amount,update_month,track,updated_at)
+        VALUES (:owner,:type,:institute,:policy_number,:start_month,:fee,:amount,:update_month,:track,:updated_at) RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at""",
+        owner=d.get("owner"), type=d.get("type"), institute=d.get("institute"),
+        policy_number=d.get("policy_number"), start_month=d.get("start_month"),
+        fee=d.get("fee"), amount=d.get("amount"), update_month=d.get("update_month"),
+        track=d.get("track"), updated_at=datetime.now().isoformat())
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
+    return jsonify(dict(zip(cols, rows[0]))), 201
 
 @app.route("/api/policies/<int:pid>", methods=["PUT"])
 def update_policy(pid):
-    d = request.json; db = get_db(); cur = db.cursor()
-    cur.execute("""UPDATE policies SET owner=%s,type=%s,institute=%s,policy_number=%s,
-        start_month=%s,fee=%s,amount=%s,update_month=%s,track=%s,updated_at=%s WHERE id=%s RETURNING *""",
-        (d.get("owner"),d.get("type"),d.get("institute"),d.get("policy_number"),
-         d.get("start_month"),d.get("fee"),d.get("amount"),d.get("update_month"),
-         d.get("track"),datetime.now().isoformat(),pid))
-    result = row_to_dict(cur.fetchone(), cur); db.commit(); cur.close()
-    return jsonify(result)
+    d = request.json
+    db = get_db()
+    rows = db.run("""UPDATE policies SET owner=:owner,type=:type,institute=:institute,policy_number=:policy_number,
+        start_month=:start_month,fee=:fee,amount=:amount,update_month=:update_month,track=:track,updated_at=:updated_at
+        WHERE id=:id RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at""",
+        owner=d.get("owner"), type=d.get("type"), institute=d.get("institute"),
+        policy_number=d.get("policy_number"), start_month=d.get("start_month"),
+        fee=d.get("fee"), amount=d.get("amount"), update_month=d.get("update_month"),
+        track=d.get("track"), updated_at=datetime.now().isoformat(), id=pid)
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
+    return jsonify(dict(zip(cols, rows[0])))
 
 @app.route("/api/policies/<int:pid>", methods=["DELETE"])
 def delete_policy(pid):
-    db = get_db(); cur = db.cursor()
-    cur.execute("DELETE FROM policies WHERE id=%s", (pid,))
-    db.commit(); cur.close()
+    db = get_db()
+    db.run("DELETE FROM policies WHERE id=:id", id=pid)
     return jsonify({"ok": True})
 
 @app.route("/api/yields")
