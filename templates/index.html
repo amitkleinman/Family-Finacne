@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>דשבורד פיננסי משפחתי</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fff;--bg2:#f6f6f4;--bg3:#f0efe9;
+  --text:#1a1a18;--text2:#6b6b67;--text3:#9b9b96;
+  --border:rgba(0,0,0,.12);--border2:rgba(0,0,0,.22);
+  --blue-bg:#e6f1fb;--blue-text:#0c447c;--blue-border:#85b7eb;
+  --red-bg:#fcebeb;--red-text:#791f1f;--red-border:#f09595;
+  --r:8px;--rl:12px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1e1e1c;--bg2:#2a2a27;--bg3:#242422;
+  --text:#f0efe9;--text2:#a0a09a;--text3:#6b6b67;
+  --border:rgba(255,255,255,.12);--border2:rgba(255,255,255,.22);
+  --blue-bg:#0c447c;--blue-text:#b5d4f4;--blue-border:#185fa5;
+  --red-bg:#501313;--red-text:#f7c1c1;--red-border:#a32d2d
+}}
+body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg3);color:var(--text);font-size:15px;line-height:1.5}
+.app{max-width:1100px;margin:0 auto;padding:1.5rem 1rem 3rem}
+.top-bar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:12px}
+.title{font-size:22px;font-weight:500}
+.subtitle{font-size:13px;color:var(--text2);margin-top:3px}
+/* summary */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem}
+.metric{background:var(--bg);border-radius:var(--r);padding:14px 16px;border:.5px solid var(--border)}
+.metric-label{font-size:12px;color:var(--text2);margin-bottom:6px}
+.metric-value{font-size:20px;font-weight:500}
+.metric.hi{border-color:var(--blue-border);background:var(--blue-bg)}
+.metric.hi .metric-label,.metric.hi .metric-value{color:var(--blue-text)}
+.metric.pen{border-color:var(--border2)}
+/* charts */
+.charts-row{display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap}
+.chart-card{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:1.25rem 1.5rem}
+.chart-title{font-size:14px;font-weight:500;margin-bottom:1rem;color:var(--text2)}
+.chart-wrap{position:relative;height:220px}
+/* filters */
+.filters-wrap{margin-bottom:1.25rem;display:flex;flex-direction:column;gap:8px}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fl{font-size:12px;color:var(--text3);min-width:50px}
+.filter-sep{color:var(--border2);margin:0 2px;align-self:center}
+.filter-btn{font-size:12px;padding:5px 12px;border-radius:20px;border:.5px solid var(--border2);background:var(--bg);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.filter-btn:hover{background:var(--bg2)}
+.filter-btn.active{background:var(--blue-bg);color:var(--blue-text);border-color:var(--blue-border)}
+.filter-btn.ex-active{background:#faece7;color:#712b13;border-color:#e8a090}
+/* cards */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:1rem}
+.card{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:1rem 1.25rem}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-owner-wrap{display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0}
+.owner-name{font-size:14px;font-weight:500}
+.owner-inst{font-size:11px;color:var(--text2)}
+.type-badge{font-size:11px;padding:3px 9px;border-radius:var(--r);white-space:nowrap}
+.badge-pension{background:#eeedfe;color:#3c3489}
+.badge-education{background:#e1f5ee;color:#085041}
+.badge-savings{background:#faeeda;color:#633806}
+.badge-insurance{background:#faece7;color:#712b13}
+.card-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.card-row{display:flex;justify-content:space-between}
+.crl{font-size:12px;color:var(--text2)}
+.crv{font-size:13px}
+.card-amount-block{border-top:.5px solid var(--border);padding-top:10px;margin-top:4px;display:flex;justify-content:space-between;align-items:flex-end}
+.card-amount{font-size:22px;font-weight:500}
+.card-amount-sub{font-size:11px;color:var(--text2)}
+/* yields */
+.yields-card{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:1.25rem 1.5rem;margin-bottom:1.5rem}
+.yields-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:10px}
+.yields-title{font-size:14px;font-weight:500}
+.yields-sub{font-size:12px;color:var(--text2);margin-top:3px}
+.yields-table{width:100%;border-collapse:collapse;font-size:13px}
+.yields-table th{text-align:right;padding:8px 10px;font-size:11px;font-weight:500;color:var(--text2);border-bottom:.5px solid var(--border2);white-space:nowrap}
+.yields-table td{padding:8px 10px;border-bottom:.5px solid var(--border);vertical-align:middle}
+.yields-table tr:last-child td{border-bottom:none}
+.ypos{color:#27500a;font-weight:500}
+.yneg{color:#791f1f;font-weight:500}
+.yields-msg{padding:12px;font-size:13px;color:var(--text2);text-align:center}
+.yields-err{padding:12px;background:var(--red-bg);color:var(--red-text);border-radius:var(--r);font-size:13px}
+/* buttons */
+.btn-add{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:12px;border:.5px dashed var(--border2);background:transparent;color:var(--text2);border-radius:var(--rl);cursor:pointer;font-size:14px;margin-bottom:1.5rem}
+.btn-add:hover{background:var(--bg2)}
+.btn-primary{padding:8px 20px;background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:var(--r);font-size:14px;cursor:pointer;font-weight:500}
+.btn-primary:hover{opacity:.85}
+.btn-secondary{padding:8px 18px;background:transparent;color:var(--text2);border:.5px solid var(--border2);border-radius:var(--r);font-size:14px;cursor:pointer}
+.btn-secondary:hover{background:var(--bg2)}
+.btn-danger{padding:8px 18px;background:transparent;color:var(--red-text);border:.5px solid var(--red-border);border-radius:var(--r);font-size:14px;cursor:pointer}
+.btn-edit{font-size:12px;padding:5px 12px;border:.5px solid var(--border2);background:var(--bg);color:var(--text2);border-radius:var(--r);cursor:pointer}
+.btn-edit:hover{background:var(--bg2)}
+.btn-fetch{font-size:12px;padding:6px 14px;background:var(--blue-bg);color:var(--blue-text);border:none;border-radius:var(--r);cursor:pointer;white-space:nowrap}
+.btn-fetch:hover{opacity:.85}
+.btn-settings{font-size:13px;padding:7px 14px;border:.5px solid var(--border2);background:var(--bg);color:var(--text2);border-radius:var(--r);cursor:pointer}
+.btn-settings:hover{background:var(--bg2)}
+/* modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg);border-radius:var(--rl);border:.5px solid var(--border);padding:1.5rem;width:min(500px,95vw);max-height:92vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:1.25rem}
+.form-group{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--text2);margin-bottom:5px;display:block}
+.form-input,.form-select{width:100%;padding:8px 10px;border:.5px solid var(--border2);border-radius:var(--r);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;direction:rtl}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--blue-border)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-actions{display:flex;gap:8px;margin-top:1.25rem;align-items:center}
+.spacer{flex:1}
+/* settings */
+.settings-panel{background:var(--bg);border:.5px solid var(--border);border-radius:var(--rl);padding:1.25rem;margin-bottom:1.5rem;display:none}
+.settings-panel.open{display:block}
+.settings-title{font-size:14px;font-weight:500;margin-bottom:12px}
+.owners-list{display:flex;flex-direction:column;gap:8px}
+.owner-row{display:flex;align-items:center;gap:8px}
+.owner-row input{flex:1}
+.owner-color{width:18px;height:18px;border-radius:50%;flex-shrink:0}
+/* misc */
+.empty{text-align:center;padding:3rem 1rem;color:var(--text2);font-size:14px}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top-bar">
+    <div>
+      <div class="title">דשבורד פיננסי משפחתי</div>
+      <div class="subtitle" id="last-updated">טוען...</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-settings" onclick="toggleSettings()">⚙ הגדרות שמות</button>
+      <button class="btn-primary" onclick="openAddModal()">+ הוסף פוליסה</button>
+    </div>
+  </div>
+
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-title">שמות בני המשפחה</div>
+    <div class="owners-list" id="owners-list"></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn-primary" onclick="saveSettings()">שמור שמות</button>
+      <button class="btn-secondary" onclick="toggleSettings()">סגור</button>
+    </div>
+  </div>
+
+  <div class="summary-grid" id="summary-grid"></div>
+
+  <div class="charts-row">
+    <div class="chart-card" style="flex:2;min-width:0">
+      <div class="chart-title" id="chart-title">צבירה לפי חודש עדכון — כל המשפחה</div>
+      <div class="chart-wrap"><canvas id="growth-chart"></canvas></div>
+    </div>
+    <div class="chart-card" style="flex:1;min-width:220px">
+      <div class="chart-title" id="pie-title">חלוקה לפי סוג מוצר</div>
+      <div class="chart-wrap"><canvas id="pie-chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="filters-wrap" id="filters-wrap"></div>
+
+  <div class="cards-grid" id="cards-grid"></div>
+  <button class="btn-add" onclick="openAddModal()">+ הוסף פוליסה חדשה</button>
+
+  <div class="yields-card">
+    <div class="yields-header">
+      <div>
+        <div class="yields-title">תשואות — גמל נט (משרד האוצר)</div>
+        <div class="yields-sub">מחפש לפי שמות הגופים הפיננסיים שהוזנו בפוליסות</div>
+      </div>
+      <button class="btn-fetch" onclick="fetchYields()">משוך נתונים</button>
+    </div>
+    <div id="yields-wrap"><div class="yields-msg">לחץ "משוך נתונים" לקבלת תשואות עדכניות</div></div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">הוסף פוליסה</div>
+    <div class="form-group">
+      <label class="form-label">בעלים</label>
+      <select class="form-select" id="f-owner"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">סוג מוצר</label>
+      <select class="form-select" id="f-type">
+        <option value="pension">קרן פנסיה</option>
+        <option value="education">קרן השתלמות</option>
+        <option value="savings">חיסכון / השקעה</option>
+        <option value="insurance">ביטוח</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">גוף פיננסי</label>
+      <input class="form-input" id="f-institute" placeholder="מגדל, הפניקס, כלל, מנורה...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">מספר פוליסה</label>
+        <input class="form-input" id="f-policy" placeholder="000000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">תאריך פתיחה</label>
+        <input class="form-input" type="month" id="f-start">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">דמי ניהול (%)</label>
+        <input class="form-input" id="f-fee" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">יתרה עדכנית (₪)</label>
+        <input class="form-input" id="f-amount" type="number" placeholder="0">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">חודש עדכון</label>
+      <input class="form-input" type="month" id="f-update-month">
+    </div>
+    <div class="form-group">
+      <label class="form-label">מסלול השקעה</label>
+      <input class="form-input" id="f-track" placeholder="מניות, אגח, מסלול ברירת מחדל...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-danger" id="btn-delete" style="display:none" onclick="deletePolicy()">מחק</button>
+      <div class="spacer"></div>
+      <button class="btn-secondary" onclick="closeModal()">ביטול</button>
+      <button class="btn-primary" onclick="savePolicy()">שמור</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var TYPE_LABELS = {pension:'קרן פנסיה',education:'קרן השתלמות',savings:'חיסכון/השקעה',insurance:'ביטוח'};
+var TYPE_BADGE  = {pension:'badge-pension',education:'badge-education',savings:'badge-savings',insurance:'badge-insurance'};
+var AVATAR_COLORS = [
+  {bg:'#eeedfe',fg:'#3c3489'},{bg:'#e1f5ee',fg:'#085041'},
+  {bg:'#faeeda',fg:'#633806'},{bg:'#faece7',fg:'#712b13'},{bg:'#e6f1fb',fg:'#0c447c'}
+];
+var owners=[], policies=[], editId=null;
+var filterGroup=null, filterType=null, excludePension=false;
+var chartInst=null, pieInst=null;
+
+function getKids()    { return owners.slice(2); }
+function getParents() { return owners.slice(0,2); }
+function getFilteredOwners() {
+  if (!filterGroup) return null;
+  if (filterGroup==='parents') return getParents();
+  if (filterGroup==='kids')    return getKids();
+  return [filterGroup];
+}
+function matchesFilter(p) {
+  var fo=getFilteredOwners();
+  if (fo && fo.indexOf(p.owner)<0) return false;
+  if (filterType && p.type!==filterType) return false;
+  if (excludePension && p.type==='pension') return false;
+  return true;
+}
+
+async function load() {
+  var r1=await fetch('/api/settings'), r2=await fetch('/api/policies');
+  var s=await r1.json(); policies=await r2.json(); owners=s.owners;
+  renderAll(); updateLastUpdated();
+}
+function updateLastUpdated() {
+  var dates=policies.map(function(p){return p.updated_at;}).filter(Boolean).sort().reverse();
+  document.getElementById('last-updated').textContent = dates.length
+    ? 'עדכון אחרון: '+new Date(dates[0]).toLocaleDateString('he-IL') : 'אין נתונים עדיין';
+}
+function fmt(n) { return Number(n||0).toLocaleString('he-IL',{maximumFractionDigits:0}); }
+function fmtMonth(m) {
+  if (!m) return '—';
+  var parts=m.split('-'), y=parts[0], mo=parseInt(parts[1]);
+  return ['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'][mo-1]+' '+y;
+}
+function ownerInitials(name) {
+  var p=name.trim().split(' ');
+  return p.length>=2 ? p[0][0]+p[1][0] : name.slice(0,2);
+}
+function ownerColor(name) {
+  var i=owners.indexOf(name);
+  return AVATAR_COLORS[(i>=0?i:0)%AVATAR_COLORS.length];
+}
+function groupLabel() {
+  if (!filterGroup) return 'כל המשפחה';
+  if (filterGroup==='parents') return 'הורים';
+  if (filterGroup==='kids') return 'ילדים';
+  return filterGroup;
+}
+function renderAll() {
+  renderSummary(); renderChart(); renderPie(); renderFilters(); renderCards();
+  renderOwnerSelect(); renderSettingsOwners();
+}
+
+function renderSummary() {
+  var fo=getFilteredOwners();
+  var sub=policies.filter(function(p){return !fo||fo.indexOf(p.owner)>=0;});
+  var byType={};
+  sub.forEach(function(p){byType[p.type]=(byType[p.type]||0)+(parseFloat(p.amount)||0);});
+  var noPen=(byType.education||0)+(byType.savings||0)+(byType.insurance||0);
+  document.getElementById('summary-grid').innerHTML=
+    '<div class="metric hi"><div class="metric-label">סה&quot;כ ללא פנסיה — '+groupLabel()+'</div><div class="metric-value">&#8362;'+fmt(noPen)+'</div></div>'+
+    '<div class="metric pen"><div class="metric-label">קרן פנסיה (בנפרד)</div><div class="metric-value">&#8362;'+fmt(byType.pension||0)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">קרן השתלמות</div><div class="metric-value">&#8362;'+fmt(byType.education||0)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">חיסכון/השקעה</div><div class="metric-value">&#8362;'+fmt(byType.savings||0)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">ביטוח</div><div class="metric-value">&#8362;'+fmt(byType.insurance||0)+'</div></div>'+
+    '<div class="metric"><div class="metric-label">פוליסות</div><div class="metric-value">'+sub.length+'</div></div>';
+}
+
+function renderChart() {
+  var sub=policies.filter(matchesFilter), mm={};
+  sub.forEach(function(p){if(p.update_month)mm[p.update_month]=(mm[p.update_month]||0)+(parseFloat(p.amount)||0);});
+  var months=Object.keys(mm).sort();
+  var typeLabel=filterType?' / '+TYPE_LABELS[filterType]:'';
+  document.getElementById('chart-title').textContent='צבירה לפי חודש עדכון — '+groupLabel()+typeLabel;
+  var isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  var lc=isDark?'#85b7eb':'#0c447c', gc=isDark?'rgba(255,255,255,.07)':'rgba(0,0,0,.07)', tc=isDark?'#a0a09a':'#6b6b67';
+  var ctx=document.getElementById('growth-chart').getContext('2d');
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  if(!months.length){ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.fillStyle=tc;ctx.font='14px -apple-system,Arial';ctx.textAlign='center';ctx.fillText('אין נתונים',ctx.canvas.width/2,110);return;}
+  chartInst=new Chart(ctx,{type:'line',data:{labels:months.map(fmtMonth),datasets:[{data:months.map(function(m){return mm[m];}),borderColor:lc,backgroundColor:isDark?'rgba(133,183,235,.12)':'rgba(12,68,124,.08)',borderWidth:2,pointRadius:5,pointBackgroundColor:lc,fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return '&#8362;'+fmt(c.parsed.y);}}}},scales:{x:{ticks:{color:tc,font:{size:11}},grid:{color:gc}},y:{ticks:{color:tc,font:{size:11},callback:function(v){return '\u20aa'+fmt(v);}},grid:{color:gc}}}}});
+}
+
+// Pie label plugin — black text, amount on each slice
+Chart.register({
+  id:'pieLabels',
+  afterDatasetsDraw:function(chart){
+    if(chart.config.type!=='doughnut')return;
+    var ctx=chart.ctx, meta=chart.getDatasetMeta(0), ds=chart.data.datasets[0];
+    var total=ds.data.reduce(function(a,b){return a+b;},0);
+    if(!total)return;
+    meta.data.forEach(function(arc,i){
+      if(ds.data[i]/total<0.05)return;
+      var mid=(arc.startAngle+arc.endAngle)/2;
+      var r=(arc.innerRadius+arc.outerRadius)/2;
+      ctx.save();
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle='#000';
+      ctx.font='bold 11px -apple-system,Arial';
+      ctx.fillText('\u20aa'+fmt(ds.data[i]),arc.x+Math.cos(mid)*r,arc.y+Math.sin(mid)*r);
+      ctx.restore();
+    });
+  }
+});
+
+function renderPie() {
+  var sub=policies.filter(matchesFilter), byType={};
+  sub.forEach(function(p){byType[p.type]=(byType[p.type]||0)+(parseFloat(p.amount)||0);});
+  var types=Object.keys(TYPE_LABELS).filter(function(k){return byType[k];});
+  var isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  var fg={pension:'#3c3489',education:'#085041',savings:'#633806',insurance:'#712b13'};
+  var bg={pension:'#eeedfe',education:'#e1f5ee',savings:'#faeeda',insurance:'#faece7'};
+  var tc=isDark?'#a0a09a':'#6b6b67';
+  var ctx=document.getElementById('pie-chart').getContext('2d');
+  if(pieInst){pieInst.destroy();pieInst=null;}
+  if(!types.length){ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.fillStyle=tc;ctx.font='13px -apple-system,Arial';ctx.textAlign='center';ctx.fillText('אין נתונים',ctx.canvas.width/2,110);return;}
+  var total=types.reduce(function(s,k){return s+(byType[k]||0);},0);
+  pieInst=new Chart(ctx,{type:'doughnut',data:{labels:types.map(function(k){return TYPE_LABELS[k];}),datasets:[{data:types.map(function(k){return byType[k];}),backgroundColor:types.map(function(k){return isDark?fg[k]:bg[k];}),borderColor:types.map(function(k){return fg[k];}),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:tc,font:{size:11},boxWidth:12,padding:10}},tooltip:{callbacks:{label:function(c){return c.label+': \u20aa'+fmt(c.parsed)+' ('+Math.round(c.parsed/total*100)+'%)';}}}}}});
+}
+
+function renderFilters() {
+  var kids=getKids();
+  var allOwCls='filter-btn'+(filterGroup?'':' active');
+  var parCls='filter-btn'+(filterGroup==='parents'?' active':'');
+  var kidCls='filter-btn'+(filterGroup==='kids'?' active':'');
+  var allTyCls='filter-btn'+(filterType?'':' active');
+  var exCls='filter-btn'+(excludePension?' ex-active':'');
+  var ownerBtns=owners.map(function(o,i){
+    var cls='filter-btn'+(filterGroup===o?' active':'');
+    return '<button class="'+cls+'" onclick="setOwnerByIndex('+i+')">'+o+'</button>';
+  }).join('');
+  var typeBtns=Object.entries(TYPE_LABELS).map(function(e){
+    var cls='filter-btn'+(filterType===e[0]?' active':'');
+    return '<button class="'+cls+'" onclick="setTypeFilter(\''+e[0]+'\')">'+e[1]+'</button>';
+  }).join('');
+  document.getElementById('filters-wrap').innerHTML=
+    '<div class="filter-row">'+
+      '<span class="fl">בעלים:</span>'+
+      '<button class="'+allOwCls+'" onclick="clearOwnerFilter()">הכל</button>'+
+      '<button class="'+parCls+'" onclick="setGroupFilter(\'parents\')">הורים</button>'+
+      (kids.length?'<button class="'+kidCls+'" onclick="setGroupFilter(\'kids\')">ילדים</button>':'')+
+      '<span class="filter-sep">|</span>'+ownerBtns+
+    '</div>'+
+    '<div class="filter-row">'+
+      '<span class="fl">סוג:</span>'+
+      '<button class="'+allTyCls+'" onclick="clearTypeFilter()">הכל</button>'+
+      typeBtns+
+      '<span class="filter-sep">|</span>'+
+      '<button class="'+exCls+'" onclick="toggleExcludePension()">ללא פנסיה</button>'+
+    '</div>';
+}
+
+function setGroupFilter(v)     {filterGroup=filterGroup===v?null:v;renderAll();}
+function setOwnerByIndex(i)    {var o=owners[i];filterGroup=filterGroup===o?null:o;renderAll();}
+function setTypeFilter(v)      {filterType=filterType===v?null:v;renderAll();}
+function clearOwnerFilter()    {filterGroup=null;renderAll();}
+function clearTypeFilter()     {filterType=null;renderAll();}
+function toggleExcludePension(){excludePension=!excludePension;renderAll();}
+
+function renderCards() {
+  var list=policies.filter(matchesFilter);
+  var grid=document.getElementById('cards-grid');
+  if(!list.length){grid.innerHTML='<div class="empty">אין פוליסות להצגה.</div>';return;}
+  grid.innerHTML=list.map(function(p){
+    var ac=ownerColor(p.owner);
+    var trackRow=p.track?'<div class="card-row"><span class="crl">מסלול</span><span class="crv" style="font-size:12px">'+p.track+'</span></div>':'';
+    return '<div class="card">'+
+      '<div class="card-header">'+
+        '<div class="card-owner-wrap">'+
+          '<div class="avatar" style="background:'+ac.bg+';color:'+ac.fg+'">'+ownerInitials(p.owner)+'</div>'+
+          '<div><div class="owner-name">'+p.owner+'</div><div class="owner-inst">'+(p.institute||'—')+'</div></div>'+
+        '</div>'+
+        '<span class="type-badge '+TYPE_BADGE[p.type]+'">'+TYPE_LABELS[p.type]+'</span>'+
+      '</div>'+
+      '<div class="card-rows">'+
+        '<div class="card-row"><span class="crl">מספר פוליסה</span><span class="crv">'+(p.policy_number||'—')+'</span></div>'+
+        '<div class="card-row"><span class="crl">תאריך פתיחה</span><span class="crv">'+fmtMonth(p.start_month)+'</span></div>'+
+        '<div class="card-row"><span class="crl">דמי ניהול</span><span class="crv">'+(p.fee!=null&&p.fee!==''?p.fee+'%':'—')+'</span></div>'+
+        trackRow+
+        '<div class="card-row"><span class="crl" style="font-size:11px">עודכן: '+fmtMonth(p.update_month)+'</span></div>'+
+      '</div>'+
+      '<div class="card-amount-block">'+
+        '<div><div class="card-amount-sub">יתרה</div><div class="card-amount">&#8362;'+fmt(p.amount)+'</div></div>'+
+        '<button class="btn-edit" onclick="openEditModal('+p.id+')">עריכה</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function renderOwnerSelect() {
+  var sel=document.getElementById('f-owner'), cur=sel.value;
+  sel.innerHTML=owners.map(function(o){return '<option value="'+o+'">'+o+'</option>';}).join('');
+  if(owners.indexOf(cur)>=0)sel.value=cur;
+}
+function renderSettingsOwners() {
+  document.getElementById('owners-list').innerHTML=owners.map(function(o,i){
+    var ac=AVATAR_COLORS[i%AVATAR_COLORS.length];
+    return '<div class="owner-row"><div class="owner-color" style="background:'+ac.bg+';border:1px solid '+ac.fg+'"></div><input class="form-input" style="height:34px" data-owner-idx="'+i+'" value="'+o+'"></div>';
+  }).join('');
+}
+async function saveSettings() {
+  var inputs=document.querySelectorAll('[data-owner-idx]');
+  var newOwners=Array.from(inputs).map(function(i){return i.value.trim();}).filter(Boolean);
+  await fetch('/api/settings/owners',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({owners:newOwners})});
+  owners=newOwners;filterGroup=null;renderAll();toast('השמות עודכנו');
+}
+function toggleSettings(){document.getElementById('settings-panel').classList.toggle('open');}
+
+function openAddModal() {
+  editId=null;
+  document.getElementById('modal-title').textContent='הוסף פוליסה חדשה';
+  document.getElementById('btn-delete').style.display='none';
+  document.getElementById('f-owner').value=owners[0]||'';
+  document.getElementById('f-type').value='pension';
+  ['f-institute','f-policy','f-start','f-fee','f-amount','f-track'].forEach(function(id){document.getElementById(id).value='';});
+  var now=new Date();
+  document.getElementById('f-update-month').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function openEditModal(id) {
+  var p=policies.find(function(x){return x.id===id;});
+  if(!p)return;
+  editId=id;
+  document.getElementById('modal-title').textContent='עריכת פוליסה';
+  document.getElementById('btn-delete').style.display='inline-block';
+  document.getElementById('f-owner').value=p.owner;
+  document.getElementById('f-type').value=p.type;
+  document.getElementById('f-institute').value=p.institute||'';
+  document.getElementById('f-policy').value=p.policy_number||'';
+  document.getElementById('f-start').value=p.start_month||'';
+  document.getElementById('f-fee').value=p.fee!=null?p.fee:'';
+  document.getElementById('f-amount').value=p.amount!=null?p.amount:'';
+  document.getElementById('f-update-month').value=p.update_month||'';
+  document.getElementById('f-track').value=p.track||'';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+async function savePolicy() {
+  var data={owner:document.getElementById('f-owner').value,type:document.getElementById('f-type').value,institute:document.getElementById('f-institute').value,policy_number:document.getElementById('f-policy').value,start_month:document.getElementById('f-start').value,fee:document.getElementById('f-fee').value||null,amount:document.getElementById('f-amount').value||0,update_month:document.getElementById('f-update-month').value,track:document.getElementById('f-track').value||null};
+  if(editId){await fetch('/api/policies/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('הפוליסה עודכנה');}
+  else{await fetch('/api/policies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('הפוליסה נוספה');}
+  closeModal();await load();
+}
+async function deletePolicy() {
+  if(!editId)return;
+  if(!confirm('למחוק את הפוליסה?'))return;
+  await fetch('/api/policies/'+editId,{method:'DELETE'});
+  closeModal();toast('הפוליסה נמחקה');await load();
+}
+
+async function fetchYields() {
+  var wrap=document.getElementById('yields-wrap');
+  wrap.innerHTML='<div class="yields-msg">מחפש בגמל נט...</div>';
+
+  // Build list of unique institute+track combos — skip policies without track
+  var queries=[];
+  var noTrack=[];
+  policies.forEach(function(p){
+    if(!p.institute) return;
+    if(!p.track){noTrack.push(p.owner+' / '+(p.institute||''));return;}
+    var key=p.institute+'|'+p.track;
+    if(!queries.find(function(q){return q.key===key;}))
+      queries.push({key:key, institute:p.institute, track:p.track});
+  });
+  if(!queries.length){
+    var msg='<div class="yields-err">לא הוגדר מסלול באף פוליסה — הוסף שדה מסלול (שם הקרן בגמל נט) כדי למשוך תשואות.</div>';
+    wrap.innerHTML=msg;return;
+  }
+
+  var allRows=[], notFound=[];
+  for(var i=0;i<queries.length;i++){
+    var qry=queries[i];
+    try{
+      var url='/api/yields?q='+encodeURIComponent(qry.institute);
+      if(qry.track) url+='&track='+encodeURIComponent(qry.track);
+      var res=await fetch(url);
+      var data=await res.json();
+      if(data.error||!data.records||!data.records.length){
+        notFound.push(qry.institute+(qry.track?' / '+qry.track:''));continue;
+      }
+      data.records.forEach(function(r){r._corp_label=data.corp||qry.institute;allRows.push(r);});
+    }catch(e){notFound.push(qry.institute);}
+  }
+
+  if(!allRows.length){
+    wrap.innerHTML='<div class="yields-err">לא נמצאו נתונים. ודא שהאפליקציה מחוברת לאינטרנט.</div>';return;
+  }
+
+  function fmtPeriod(p){if(!p)return'—';var s=String(p);return s.slice(4,6)+'/'+s.slice(0,4);}
+  function yCell(val){
+    if(val==null||val==='')return'<td style="color:var(--text2)">—</td>';
+    var n=parseFloat(val);if(isNaN(n))return'<td>'+val+'</td>';
+    var cls=n>0?'ypos':n<0?'yneg':'';
+    return'<td><span class="'+cls+'">'+(n>0?'+':'')+n.toFixed(2)+'%</span></td>';
+  }
+
+  var html='<div style="overflow-x:auto"><table class="yields-table"><thead><tr>'+
+    '<th>שם קרן / מסלול</th>'+
+    '<th>גוף מנהל</th>'+
+    '<th>התמחות</th>'+
+    '<th>תקופה</th>'+
+    '<th>חודש</th>'+
+    '<th>מתחילת שנה</th>'+
+    '<th>3 שנים (מצטבר)</th>'+
+    '<th>5 שנים (מצטבר)</th>'+
+    '<th>דמי ניהול</th>'+
+    '</tr></thead><tbody>'+
+    allRows.map(function(r){
+      return'<tr>'+
+        '<td style="font-weight:500">'+(r.FUND_NAME||'—')+'</td>'+
+        '<td style="font-size:11px;color:var(--text2)">'+(r.MANAGING_CORPORATION||r._corp_label||'—')+'</td>'+
+        '<td style="font-size:11px;color:var(--text2)">'+(r.SPECIALIZATION||r.FUND_CLASSIFICATION||'—')+'</td>'+
+        '<td style="font-size:11px;color:var(--text2)">'+fmtPeriod(r.REPORT_PERIOD)+'</td>'+
+        yCell(r.MONTHLY_YIELD)+
+        yCell(r.YEAR_TO_DATE_YIELD)+
+        yCell(r.YIELD_TRAILING_3_YRS)+
+        yCell(r.YIELD_TRAILING_5_YRS)+
+        '<td style="font-size:12px">'+(r.AVG_ANNUAL_MANAGEMENT_FEE!=null?r.AVG_ANNUAL_MANAGEMENT_FEE+'%':'—')+'</td>'+
+      '</tr>';
+    }).join('')+
+    '</tbody></table></div>';
+
+  if(notFound.length)html+='<div style="margin-top:8px;font-size:11px;color:var(--text2)">לא נמצא: '+notFound.join(', ')+'</div>';
+  if(noTrack.length)html+='<div style="margin-top:6px;font-size:11px;color:var(--text3)">ללא מסלול (לא נכללו): '+noTrack.join(', ')+'</div>';
+  wrap.innerHTML=html;
+}
+
+function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2500);}
+
+document.getElementById('modal-overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+load();
+</script>
+</body>
+</html>
