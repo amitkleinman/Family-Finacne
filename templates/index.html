@@ -225,6 +225,10 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg3)
       <label class="form-label">מסלול השקעה</label>
       <input class="form-input" id="f-track" placeholder="מניות, אגח, מסלול ברירת מחדל...">
     </div>
+    <div class="form-group">
+      <label class="form-label">מספר קופה בגמל נט (FUND_ID)</label>
+      <input class="form-input" id="f-fund-id" type="number" placeholder="לדוג׳: 117">
+    </div>
     <div class="modal-actions">
       <button class="btn-danger" id="btn-delete" style="display:none" onclick="deletePolicy()">מחק</button>
       <div class="spacer"></div>
@@ -410,6 +414,7 @@ function renderCards() {
   grid.innerHTML=list.map(function(p){
     var ac=ownerColor(p.owner);
     var trackRow=p.track?'<div class="card-row"><span class="crl">מסלול</span><span class="crv" style="font-size:12px">'+p.track+'</span></div>':'';
+    var fundIdRow=p.fund_id?'<div class="card-row"><span class="crl">מס׳ קופה גמל נט</span><span class="crv" style="font-size:12px;color:var(--text2)">'+p.fund_id+'</span></div>':'';
     return '<div class="card">'+
       '<div class="card-header">'+
         '<div class="card-owner-wrap">'+
@@ -423,6 +428,7 @@ function renderCards() {
         '<div class="card-row"><span class="crl">תאריך פתיחה</span><span class="crv">'+fmtMonth(p.start_month)+'</span></div>'+
         '<div class="card-row"><span class="crl">דמי ניהול</span><span class="crv">'+(p.fee!=null&&p.fee!==''?p.fee+'%':'—')+'</span></div>'+
         trackRow+
+        fundIdRow+
         '<div class="card-row"><span class="crl" style="font-size:11px">עודכן: '+fmtMonth(p.update_month)+'</span></div>'+
       '</div>'+
       '<div class="card-amount-block">'+
@@ -458,7 +464,7 @@ function openAddModal() {
   document.getElementById('btn-delete').style.display='none';
   document.getElementById('f-owner').value=owners[0]||'';
   document.getElementById('f-type').value='pension';
-  ['f-institute','f-policy','f-start','f-fee','f-amount','f-track'].forEach(function(id){document.getElementById(id).value='';});
+  ['f-institute','f-policy','f-start','f-fee','f-amount','f-track','f-fund-id'].forEach(function(id){document.getElementById(id).value='';});
   var now=new Date();
   document.getElementById('f-update-month').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   document.getElementById('modal-overlay').classList.add('open');
@@ -478,11 +484,12 @@ function openEditModal(id) {
   document.getElementById('f-amount').value=p.amount!=null?p.amount:'';
   document.getElementById('f-update-month').value=p.update_month||'';
   document.getElementById('f-track').value=p.track||'';
+  document.getElementById('f-fund-id').value=p.fund_id||'';
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
 async function savePolicy() {
-  var data={owner:document.getElementById('f-owner').value,type:document.getElementById('f-type').value,institute:document.getElementById('f-institute').value,policy_number:document.getElementById('f-policy').value,start_month:document.getElementById('f-start').value,fee:document.getElementById('f-fee').value||null,amount:document.getElementById('f-amount').value||0,update_month:document.getElementById('f-update-month').value,track:document.getElementById('f-track').value||null};
+  var data={owner:document.getElementById('f-owner').value,type:document.getElementById('f-type').value,institute:document.getElementById('f-institute').value,policy_number:document.getElementById('f-policy').value,start_month:document.getElementById('f-start').value,fee:document.getElementById('f-fee').value||null,amount:document.getElementById('f-amount').value||0,update_month:document.getElementById('f-update-month').value,track:document.getElementById('f-track').value||null,fund_id:document.getElementById('f-fund-id').value||null};
   if(editId){await fetch('/api/policies/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('הפוליסה עודכנה');}
   else{await fetch('/api/policies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});toast('הפוליסה נוספה');}
   closeModal();await load();
@@ -503,13 +510,13 @@ async function fetchYields() {
   var noTrack=[];
   policies.forEach(function(p){
     if(!p.institute) return;
-    if(!p.track){noTrack.push(p.owner+' / '+(p.institute||''));return;}
-    var key=p.institute+'|'+p.track;
+    if(!p.track && !p.fund_id){noTrack.push(p.owner+' / '+(p.institute||''));return;}
+    var key=p.institute+'|'+(p.track||'')+'|'+(p.fund_id||'');
     if(!queries.find(function(q){return q.key===key;}))
-      queries.push({key:key, institute:p.institute, track:p.track});
+      queries.push({key:key, institute:p.institute, track:p.track||'', fund_id:p.fund_id||''});
   });
   if(!queries.length){
-    var msg='<div class="yields-err">לא הוגדר מסלול באף פוליסה — הוסף שדה מסלול (שם הקרן בגמל נט) כדי למשוך תשואות.</div>';
+    var msg='<div class="yields-err">לא הוגדר מסלול או מספר קופה באף פוליסה.</div>';
     wrap.innerHTML=msg;return;
   }
 
@@ -519,6 +526,7 @@ async function fetchYields() {
     try{
       var url='/api/yields?q='+encodeURIComponent(qry.institute);
       if(qry.track) url+='&track='+encodeURIComponent(qry.track);
+      if(qry.fund_id) url+='&fund_id='+encodeURIComponent(qry.fund_id);
       var res=await fetch(url);
       var data=await res.json();
       if(data.error||!data.records||!data.records.length){
