@@ -369,7 +369,10 @@ Chart.register({
 });
 
 function renderPie() {
-  var sub=policies.filter(matchesFilter), byType={};
+  var sub=policies.filter(matchesFilter);
+  // also exclude pension if the global pension filter is active
+  if(excludePension) sub=sub.filter(function(p){return p.type!=='pension';});
+  var byType={};
   sub.forEach(function(p){byType[p.type]=(byType[p.type]||0)+(parseFloat(p.amount)||0);});
   var types=Object.keys(TYPE_LABELS).filter(function(k){return byType[k];});
   var isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
@@ -391,6 +394,9 @@ function renderPie() {
 
   var dataVals=types.map(function(k){return byType[k];});
   var grandTotal=dataVals.reduce(function(a,b){return a+b;},0);
+  // exclude pension from total if pension is not shown in pie
+  var displayTotal=grandTotal;
+  if(byType['pension'] && !types.includes('pension')) displayTotal=grandTotal; // already excluded via matchesFilter
   if(totalEl)totalEl.innerHTML='<span style="font-weight:500;color:var(--text)">סה"כ: &#8362;'+fmt(grandTotal)+'</span>';
 
   pieInst=new Chart(ctx,{type:'doughnut',
