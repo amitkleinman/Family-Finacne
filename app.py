@@ -37,9 +37,14 @@ def init_db():
         id SERIAL PRIMARY KEY, owner TEXT NOT NULL,
         type TEXT NOT NULL, institute TEXT, policy_number TEXT,
         start_month TEXT, fee REAL, amount REAL DEFAULT 0,
-        update_month TEXT, track TEXT,
+        update_month TEXT, track TEXT, fund_id TEXT,
         created_at TEXT DEFAULT now()::text,
         updated_at TEXT DEFAULT now()::text)""")
+    # migrate existing tables
+    try:
+        conn.run("ALTER TABLE policies ADD COLUMN fund_id TEXT")
+    except Exception:
+        pass
     conn.run("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     conn.run("INSERT INTO settings (key,value) VALUES (:k,:v) ON CONFLICT (key) DO NOTHING",
              k='owners', v=json.dumps(OWNERS))
@@ -87,34 +92,35 @@ def update_owners():
 @app.route("/api/policies")
 def get_policies():
     db = get_db()
-    rows = db.run("SELECT id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at FROM policies ORDER BY owner, type")
-    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
+    rows = db.run("SELECT id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,fund_id,created_at,updated_at FROM policies ORDER BY owner, type")
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","fund_id","created_at","updated_at"]
     return jsonify([dict(zip(cols,r)) for r in rows])
 
 @app.route("/api/policies", methods=["POST"])
 def add_policy():
-    d = request.json
-    db = get_db()
-    rows = db.run("""INSERT INTO policies (owner,type,institute,policy_number,start_month,fee,amount,update_month,track,updated_at)
-        VALUES (:owner,:type,:institute,:policy_number,:start_month,:fee,:amount,:update_month,:track,:updated_at) RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at""",
+    d = request.json; db = get_db()
+    rows = db.run("""INSERT INTO policies (owner,type,institute,policy_number,start_month,fee,amount,update_month,track,fund_id,updated_at)
+        VALUES (:owner,:type,:institute,:policy_number,:start_month,:fee,:amount,:update_month,:track,:fund_id,:updated_at)
+        RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,fund_id,created_at,updated_at""",
         owner=d.get("owner"), type=d.get("type"), institute=d.get("institute"),
         policy_number=d.get("policy_number"), start_month=d.get("start_month"),
         fee=d.get("fee"), amount=d.get("amount"), update_month=d.get("update_month"),
-        track=d.get("track"), updated_at=datetime.now().isoformat())
-    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
+        track=d.get("track"), fund_id=d.get("fund_id"), updated_at=datetime.now().isoformat())
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","fund_id","created_at","updated_at"]
     return jsonify(dict(zip(cols, rows[0]))), 201
 
 @app.route("/api/policies/<int:pid>", methods=["PUT"])
 def update_policy(pid):
-    d = request.json
-    db = get_db()
+    d = request.json; db = get_db()
     rows = db.run("""UPDATE policies SET owner=:owner,type=:type,institute=:institute,policy_number=:policy_number,
-        start_month=:start_month,fee=:fee,amount=:amount,update_month=:update_month,track=:track,updated_at=:updated_at
-        WHERE id=:id RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,created_at,updated_at""",
+        start_month=:start_month,fee=:fee,amount=:amount,update_month=:update_month,track=:track,fund_id=:fund_id,updated_at=:updated_at
+        WHERE id=:id RETURNING id,owner,type,institute,policy_number,start_month,fee,amount,update_month,track,fund_id,created_at,updated_at""",
         owner=d.get("owner"), type=d.get("type"), institute=d.get("institute"),
         policy_number=d.get("policy_number"), start_month=d.get("start_month"),
         fee=d.get("fee"), amount=d.get("amount"), update_month=d.get("update_month"),
-        track=d.get("track"), updated_at=datetime.now().isoformat(), id=pid)
+        track=d.get("track"), fund_id=d.get("fund_id"), updated_at=datetime.now().isoformat(), id=pid)
+    cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","fund_id","created_at","updated_at"]
+    return jsonify(dict(zip(cols, rows[0])))
     cols = ["id","owner","type","institute","policy_number","start_month","fee","amount","update_month","track","created_at","updated_at"]
     return jsonify(dict(zip(cols, rows[0])))
 
@@ -128,7 +134,27 @@ def delete_policy(pid):
 def get_yields():
     q = request.args.get("q","").strip()
     track = request.args.get("track","").strip()
+    fund_id = request.args.get("fund_id","").strip()
     if not q: return jsonify({"error":"missing q"}), 400
+
+    # If fund_id provided, use exact FUND_ID filter — most accurate
+    if fund_id:
+        try:
+            params = urllib.parse.urlencode({
+                "resource_id": RESOURCE_ID,
+                "filters": json.dumps({"FUND_ID": int(fund_id)}),
+                "limit": 5,
+                "sort": "REPORT_PERIOD desc"
+            })
+            req = urllib.request.Request(f"https://data.gov.il/api/3/action/datastore_search?{params}", headers=GOV_HEADERS)
+            with urllib.request.urlopen(req, timeout=12) as resp: data = json.loads(resp.read())
+            records = data.get("result",{}).get("records",[])
+            if records:
+                # keep only most recent
+                latest = max(records, key=lambda r: r.get("REPORT_PERIOD") or 0)
+                return jsonify({"records":[latest], "count":1, "corp": latest.get("MANAGING_CORPORATION","")})
+        except Exception as e:
+            pass  # fall through to name-based search
 
     try:
         params = urllib.parse.urlencode({"resource_id":RESOURCE_ID,"q":q,"limit":10})
