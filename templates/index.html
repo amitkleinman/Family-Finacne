@@ -151,7 +151,7 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg3)
     <div class="chart-card" style="flex:2;min-width:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
         <div class="chart-title" id="chart-title" style="margin-bottom:0">צבירה לפי חודש עדכון — כל המשפחה</div>
-        <button id="btn-excl-pension-chart" onclick="toggleExcludePensionChart()" style="font-size:11px;padding:4px 10px;border-radius:20px;border:.5px solid var(--border2);background:var(--bg);color:var(--text2);cursor:pointer;white-space:nowrap">ללא פנסיה</button>
+        <button id="btn-excl-pension-chart" onclick="toggleExcludePensionChart()" style="font-size:11px;padding:4px 10px;border-radius:20px;border:.5px solid var(--border2);background:var(--bg);color:var(--text2);cursor:pointer;white-space:nowrap">עם פנסיה</button>
       </div>
       <div class="chart-wrap"><canvas id="growth-chart"></canvas></div>
     </div>
@@ -252,7 +252,7 @@ var AVATAR_COLORS = [
   {bg:'#faeeda',fg:'#633806'},{bg:'#faece7',fg:'#712b13'},{bg:'#e6f1fb',fg:'#0c447c'}
 ];
 var owners=[], policies=[], editId=null;
-var filterGroup=null, filterType=null, excludePension=false, excludePensionChart=false;
+var filterGroup=null, filterType=null, excludePension=false, excludePensionChart=true;
 var chartInst=null, pieInst=null;
 
 function getKids()    { return owners.slice(2); }
@@ -330,9 +330,14 @@ function renderChart() {
   var typeLabel=filterType?' / '+TYPE_LABELS[filterType]:'';
   var penLabel=excludePensionChart?' (ללא פנסיה)':'';
   document.getElementById('chart-title').textContent='צבירה לפי חודש עדכון — '+groupLabel()+typeLabel+penLabel;
-  // update button style
+  // update button: when excluding pension, show "עם פנסיה" to allow adding it back
   var btn=document.getElementById('btn-excl-pension-chart');
-  if(btn){btn.style.background=excludePensionChart?'#faece7':'var(--bg)';btn.style.color=excludePensionChart?'#712b13':'var(--text2)';btn.style.borderColor=excludePensionChart?'#e8a090':'var(--border2)';}
+  if(btn){
+    btn.textContent=excludePensionChart?'+ הוסף פנסיה':'הסר פנסיה';
+    btn.style.background=excludePensionChart?'var(--bg)':'#faece7';
+    btn.style.color=excludePensionChart?'var(--text2)':'#712b13';
+    btn.style.borderColor=excludePensionChart?'var(--border2)':'#e8a090';
+  }
   var isDark=window.matchMedia('(prefers-color-scheme:dark)').matches;
   var lc=isDark?'#85b7eb':'#0c447c', gc=isDark?'rgba(255,255,255,.07)':'rgba(0,0,0,.07)', tc=isDark?'#a0a09a':'#6b6b67';
   var ctx=document.getElementById('growth-chart').getContext('2d');
@@ -400,10 +405,12 @@ function renderPie() {
           return;
         }
         var i=els[0].index;
-        var label=types[i]?TYPE_LABELS[types[i]]:pieInst.data.labels[i];
+        var label=TYPE_LABELS[types[i]]||pieInst.data.labels[i];
         var val=dataVals[i];
         var pct=grandTotal?Math.round(val/grandTotal*100):0;
         if(totalEl)totalEl.innerHTML='<span style="font-weight:500;color:var(--text)">'+label+': &#8362;'+fmt(val)+'</span> <span style="color:var(--text2)">('+pct+'%)</span>';
+        // prevent chart from toggling the segment visibility
+        return false;
       },
       plugins:{
         legend:{position:'bottom',labels:{color:tc,font:{size:11},boxWidth:12,padding:10}},
