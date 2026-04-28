@@ -40,11 +40,21 @@ def init_db():
         update_month TEXT, track TEXT, fund_id TEXT,
         created_at TEXT DEFAULT now()::text,
         updated_at TEXT DEFAULT now()::text)""")
-    # migrate existing tables
     try:
         conn.run("ALTER TABLE policies ADD COLUMN fund_id TEXT")
     except Exception:
         pass
+    conn.run("""CREATE TABLE IF NOT EXISTS stocks (
+        id SERIAL PRIMARY KEY,
+        ticker TEXT NOT NULL,
+        name TEXT,
+        exchange TEXT DEFAULT 'US',
+        quantity REAL DEFAULT 0,
+        avg_buy_price REAL DEFAULT 0,
+        buy_date TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT now()::text,
+        updated_at TEXT DEFAULT now()::text)""")
     conn.run("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     conn.run("INSERT INTO settings (key,value) VALUES (:k,:v) ON CONFLICT (key) DO NOTHING",
              k='owners', v=json.dumps(OWNERS))
@@ -197,6 +207,121 @@ def get_yields():
     results=[r for s,r in scored if s==best] if best>0 else []
     results.sort(key=lambda r:r.get("FUND_NAME") or "")
     return jsonify({"records":results,"count":len(results),"corp":corp_name})
+
+# ── Stocks ──────────────────────────────────────────────
+
+STOCK_COLS = ["id","ticker","name","exchange","quantity","avg_buy_price","buy_date","notes","created_at","updated_at"]
+
+@app.route("/api/stocks")
+def get_stocks():
+    db = get_db()
+    rows = db.run("SELECT id,ticker,name,exchange,quantity,avg_buy_price,buy_date,notes,created_at,updated_at FROM stocks ORDER BY exchange,ticker")
+    return jsonify([dict(zip(STOCK_COLS,r)) for r in rows])
+
+@app.route("/api/stocks", methods=["POST"])
+def add_stock():
+    d = request.json; db = get_db()
+    rows = db.run("""INSERT INTO stocks (ticker,name,exchange,quantity,avg_buy_price,buy_date,notes,updated_at)
+        VALUES (:ticker,:name,:exchange,:quantity,:avg_buy_price,:buy_date,:notes,:updated_at) RETURNING *""",
+        ticker=(d.get("ticker","")).upper().strip(),
+        name=d.get("name",""), exchange=d.get("exchange","US"),
+        quantity=d.get("quantity",0), avg_buy_price=d.get("avg_buy_price",0),
+        buy_date=d.get("buy_date",""), notes=d.get("notes",""),
+        updated_at=datetime.now().isoformat())
+    return jsonify(dict(zip(STOCK_COLS, rows[0]))), 201
+
+@app.route("/api/stocks/<int:sid>", methods=["PUT"])
+def update_stock(sid):
+    d = request.json; db = get_db()
+    rows = db.run("""UPDATE stocks SET ticker=:ticker,name=:name,exchange=:exchange,
+        quantity=:quantity,avg_buy_price=:avg_buy_price,buy_date=:buy_date,notes=:notes,updated_at=:updated_at
+        WHERE id=:id RETURNING *""",
+        ticker=(d.get("ticker","")).upper().strip(),
+        name=d.get("name",""), exchange=d.get("exchange","US"),
+        quantity=d.get("quantity",0), avg_buy_price=d.get("avg_buy_price",0),
+        buy_date=d.get("buy_date",""), notes=d.get("notes",""),
+        updated_at=datetime.now().isoformat(), id=sid)
+    return jsonify(dict(zip(STOCK_COLS, rows[0])))
+
+@app.route("/api/stocks/<int:sid>", methods=["DELETE"])
+def delete_stock(sid):
+    db = get_db()
+    db.run("DELETE FROM stocks WHERE id=:id", id=sid)
+    return jsonify({"ok": True})
+
+@app.route("/api/stocks/prices")
+def get_stock_prices():
+    """
+    Fetch current prices from Yahoo Finance for a list of tickers.
+    tickers param: comma-separated list e.g. AAPL,TEVA.TA,SPY
+    Returns dict: ticker -> {price, prev_close, change_pct, day_change_pct, month_change_pct, ytd_change_pct, currency, name}
+    """
+    tickers_param = request.args.get("tickers","").strip()
+    if not tickers_param:
+        return jsonify({"error":"missing tickers"}), 400
+
+    tickers = [t.strip().upper() for t in tickers_param.split(",") if t.strip()]
+    results = {}
+
+    for ticker in tickers:
+        try:
+            # Yahoo Finance v8 chart API — no key needed
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(ticker)}?interval=1d&range=1y"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "application/json"
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+
+            result = data.get("chart",{}).get("result",[])
+            if not result:
+                results[ticker] = {"error": "not found"}
+                continue
+
+            r = result[0]
+            meta = r.get("meta",{})
+            closes = r.get("indicators",{}).get("quote",[{}])[0].get("close",[])
+            timestamps = r.get("timestamp",[])
+
+            # filter out None values
+            valid = [(t,c) for t,c in zip(timestamps,closes) if c is not None]
+            if not valid:
+                results[ticker] = {"error": "no data"}
+                continue
+
+            current_price = meta.get("regularMarketPrice") or valid[-1][1]
+            prev_close = meta.get("previousClose") or meta.get("chartPreviousClose") or (valid[-2][1] if len(valid)>1 else current_price)
+
+            # day change
+            day_chg = ((current_price - prev_close) / prev_close * 100) if prev_close else 0
+
+            # 1 month ago
+            from datetime import datetime as dt, timedelta
+            one_month_ago = dt.now() - timedelta(days=30)
+            month_prices = [(t,c) for t,c in valid if dt.fromtimestamp(t) <= one_month_ago]
+            month_price = month_prices[-1][1] if month_prices else valid[0][1]
+            month_chg = ((current_price - month_price) / month_price * 100) if month_price else 0
+
+            # YTD — first trading day of this year
+            this_year = dt.now().year
+            ytd_prices = [(t,c) for t,c in valid if dt.fromtimestamp(t).year >= this_year]
+            ytd_price = ytd_prices[0][1] if ytd_prices else valid[0][1]
+            ytd_chg = ((current_price - ytd_price) / ytd_price * 100) if ytd_price else 0
+
+            results[ticker] = {
+                "price": round(current_price, 4),
+                "prev_close": round(prev_close, 4),
+                "day_change_pct": round(day_chg, 2),
+                "month_change_pct": round(month_chg, 2),
+                "ytd_change_pct": round(ytd_chg, 2),
+                "currency": meta.get("currency",""),
+                "name": meta.get("longName") or meta.get("shortName") or ticker,
+            }
+        except Exception as e:
+            results[ticker] = {"error": str(e)}
+
+    return jsonify(results)
 
 if __name__ == "__main__":
     init_db()
