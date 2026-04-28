@@ -178,6 +178,22 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg3)
     <div id="yields-wrap"><div class="yields-msg">לחץ "משוך נתונים" לקבלת תשואות עדכניות</div></div>
   </div>
 
+  <!-- Stocks Section -->
+  <div class="yields-card" id="stocks-section">
+    <div class="yields-header">
+      <div>
+        <div class="yields-title">מניות ותעודות סל</div>
+        <div class="yields-sub" id="stocks-subtitle">נתוני מחיר מ-Yahoo Finance (פיגור ~15 דק׳)</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-fetch" onclick="refreshStockPrices()">רענן מחירים</button>
+        <button class="btn-primary" onclick="openStockModal()">+ הוסף מניה</button>
+      </div>
+    </div>
+    <div id="stocks-summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem"></div>
+    <div id="stocks-table-wrap"><div class="yields-msg">טוען...</div></div>
+  </div>
+
 </div>
 
 <!-- Modal -->
@@ -243,6 +259,54 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;background:var(--bg3)
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Stock Modal -->
+<div class="modal-overlay" id="stock-modal-overlay">
+  <div class="modal">
+    <div class="modal-title" id="stock-modal-title">הוסף מניה / תעודת סל</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">סימול (Ticker)</label>
+        <input class="form-input" id="s-ticker" placeholder="AAPL / TEVA.TA" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label class="form-label">בורסה</label>
+        <select class="form-select" id="s-exchange">
+          <option value="US">ארה"ב (NYSE/NASDAQ)</option>
+          <option value="IL">ישראל (ת"א)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">שם (אופציונלי)</label>
+      <input class="form-input" id="s-name" placeholder="Apple Inc.">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">כמות מניות</label>
+        <input class="form-input" id="s-quantity" type="number" step="0.0001" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">מחיר קנייה ממוצע</label>
+        <input class="form-input" id="s-buy-price" type="number" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">תאריך קנייה ראשון</label>
+      <input class="form-input" id="s-buy-date" type="date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">הערות</label>
+      <input class="form-input" id="s-notes" placeholder="הערות...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-danger" id="s-btn-delete" style="display:none" onclick="deleteStock()">מחק</button>
+      <div class="spacer"></div>
+      <button class="btn-secondary" onclick="closeStockModal()">ביטול</button>
+      <button class="btn-primary" onclick="saveStock()">שמור</button>
+    </div>
+  </div>
+</div>
 
 <script>
 var TYPE_LABELS = {pension:'קרן פנסיה',education:'קרן השתלמות',savings:'חיסכון/השקעה',insurance:'ביטוח'};
@@ -645,11 +709,159 @@ async function fetchYields() {
   wrap.innerHTML=html;
 }
 
+// ── Stocks ────────────────────────────────────────────
+var stocks=[], stockPrices={}, stockEditId=null;
+
+async function loadStocks() {
+  var r=await fetch('/api/stocks');
+  stocks=await r.json();
+  renderStocksTable();
+}
+
+function openStockModal(id) {
+  stockEditId=id||null;
+  document.getElementById('stock-modal-title').textContent=id?'עריכת מניה':'הוסף מניה / תעודת סל';
+  document.getElementById('s-btn-delete').style.display=id?'inline-block':'none';
+  if(id){
+    var s=stocks.find(function(x){return x.id===id;});
+    if(!s)return;
+    document.getElementById('s-ticker').value=s.ticker||'';
+    document.getElementById('s-exchange').value=s.exchange||'US';
+    document.getElementById('s-name').value=s.name||'';
+    document.getElementById('s-quantity').value=s.quantity!=null?s.quantity:'';
+    document.getElementById('s-buy-price').value=s.avg_buy_price!=null?s.avg_buy_price:'';
+    document.getElementById('s-buy-date').value=s.buy_date||'';
+    document.getElementById('s-notes').value=s.notes||'';
+  } else {
+    ['s-ticker','s-name','s-quantity','s-buy-price','s-buy-date','s-notes'].forEach(function(i){document.getElementById(i).value='';});
+    document.getElementById('s-exchange').value='US';
+  }
+  document.getElementById('stock-modal-overlay').classList.add('open');
+}
+function closeStockModal(){document.getElementById('stock-modal-overlay').classList.remove('open');}
+
+async function saveStock() {
+  var ticker=document.getElementById('s-ticker').value.trim().toUpperCase();
+  if(!ticker){toast('נא להזין סימול');return;}
+  var data={
+    ticker:ticker,
+    exchange:document.getElementById('s-exchange').value,
+    name:document.getElementById('s-name').value,
+    quantity:parseFloat(document.getElementById('s-quantity').value)||0,
+    avg_buy_price:parseFloat(document.getElementById('s-buy-price').value)||0,
+    buy_date:document.getElementById('s-buy-date').value,
+    notes:document.getElementById('s-notes').value
+  };
+  if(stockEditId){
+    await fetch('/api/stocks/'+stockEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    toast('המניה עודכנה');
+  } else {
+    await fetch('/api/stocks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    toast('המניה נוספה');
+  }
+  closeStockModal();
+  await loadStocks();
+  refreshStockPrices();
+}
+
+async function deleteStock() {
+  if(!stockEditId)return;
+  if(!confirm('למחוק את המניה?'))return;
+  await fetch('/api/stocks/'+stockEditId,{method:'DELETE'});
+  closeStockModal();toast('המניה נמחקה');
+  await loadStocks();renderStocksTable();
+}
+
+async function refreshStockPrices() {
+  if(!stocks.length){renderStocksTable();return;}
+  document.getElementById('stocks-subtitle').textContent='טוען מחירים...';
+  var tickers=stocks.map(function(s){
+    return s.exchange==='IL' && !s.ticker.includes('.') ? s.ticker+'.TA' : s.ticker;
+  }).join(',');
+  try{
+    var r=await fetch('/api/stocks/prices?tickers='+encodeURIComponent(tickers));
+    stockPrices=await r.json();
+    var now=new Date();
+    document.getElementById('stocks-subtitle').textContent='עודכן: '+now.toLocaleTimeString('he-IL')+' (פיגור ~15 דק׳)';
+  }catch(e){
+    document.getElementById('stocks-subtitle').textContent='שגיאה בטעינת מחירים';
+  }
+  renderStocksTable();
+}
+
+function renderStocksTable() {
+  var wrap=document.getElementById('stocks-table-wrap');
+  if(!stocks.length){
+    wrap.innerHTML='<div class="yields-msg">אין מניות. לחץ "+ הוסף מניה" להתחלה.</div>';
+    document.getElementById('stocks-summary').innerHTML='';
+    return;
+  }
+
+  function pct(v){
+    if(v==null||isNaN(v))return'<span style="color:var(--text2)">—</span>';
+    var cls=v>0?'ypos':v<0?'yneg':'';
+    return'<span class="'+cls+'">'+(v>0?'+':'')+v.toFixed(2)+'%</span>';
+  }
+  function money(v,cur){
+    if(v==null||isNaN(v))return'—';
+    var sym=cur==='ILS'?'₪':'$';
+    return sym+fmt(Math.abs(v));
+  }
+  function plClass(v){ return v>0?'ypos':v<0?'yneg':''; }
+
+  var totalValueIL=0, totalValueUS=0, totalPL=0;
+  var rows=stocks.map(function(s){
+    var yTicker=s.exchange==='IL'&&!s.ticker.includes('.')?s.ticker+'.TA':s.ticker;
+    var p=stockPrices[yTicker]||{};
+    var price=p.price;
+    var cur=p.currency||'';
+    var value=price!=null?price*s.quantity:null;
+    var cost=s.avg_buy_price*s.quantity;
+    var pl=value!=null?value-cost:null;
+    var plPct=cost>0&&pl!=null?pl/cost*100:null;
+    if(value!=null){if(cur==='ILS')totalValueIL+=value;else totalValueUS+=value;}
+    if(pl!=null)totalPL+=pl;
+
+    var displayName=p.name||s.name||s.ticker;
+
+    return '<tr>'+
+      '<td><span style="font-weight:500;font-size:13px">'+s.ticker+'</span><br><span style="font-size:11px;color:var(--text2)">'+displayName+'</span></td>'+
+      '<td style="font-size:12px;color:var(--text2)">'+s.exchange+'</td>'+
+      '<td style="font-size:13px">'+fmt(s.quantity)+'</td>'+
+      '<td style="font-size:13px">'+(price!=null?(cur==='ILS'?'₪':'$')+price.toFixed(2):'—')+'</td>'+
+      '<td style="font-size:13px">'+(value!=null?money(value,cur):'—')+'</td>'+
+      '<td style="font-size:13px">'+(s.avg_buy_price?(cur==='ILS'?'₪':'$')+s.avg_buy_price.toFixed(2):'—')+'</td>'+
+      '<td style="font-size:13px"><span class="'+(pl!=null?plClass(pl):'')+'">'+(pl!=null?(pl>=0?'+':'')+money(pl,cur):'—')+'</span></td>'+
+      '<td>'+pct(plPct)+'</td>'+
+      '<td>'+pct(p.day_change_pct)+'</td>'+
+      '<td>'+pct(p.month_change_pct)+'</td>'+
+      '<td>'+pct(p.ytd_change_pct)+'</td>'+
+      '<td><button class="btn-edit" onclick="openStockModal('+s.id+')">עריכה</button></td>'+
+    '</tr>';
+  }).join('');
+
+  wrap.innerHTML='<div style="overflow-x:auto"><table class="yields-table"><thead><tr>'+
+    '<th>מניה</th><th>בורסה</th><th>כמות</th><th>מחיר נוכחי</th><th>שווי</th>'+
+    '<th>מחיר קנייה</th><th>רווח/הפסד</th><th>% מקנייה</th>'+
+    '<th>יום</th><th>חודש</th><th>מתחילת שנה</th><th></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+  // Summary metrics
+  var sumHtml='';
+  if(totalValueUS) sumHtml+='<div class="metric"><div class="metric-label">שווי מניות ארה"ב</div><div class="metric-value">$'+fmt(totalValueUS)+'</div></div>';
+  if(totalValueIL) sumHtml+='<div class="metric"><div class="metric-label">שווי מניות ת"א</div><div class="metric-value">₪'+fmt(totalValueIL)+'</div></div>';
+  if(totalPL!==0) sumHtml+='<div class="metric '+(totalPL>=0?'hi':'')+'"><div class="metric-label">רווח/הפסד כולל</div><div class="metric-value '+(totalPL>=0?'':'')+'"><span class="'+(totalPL>=0?'ypos':'yneg')+'">'+(totalPL>=0?'+':'')+fmt(Math.abs(totalPL))+'</span></div></div>';
+  document.getElementById('stocks-summary').innerHTML=sumHtml;
+}
+
+document.getElementById('stock-modal-overlay').addEventListener('click',function(e){if(e.target===this)closeStockModal();});
+
 function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2500);}
 
 document.getElementById('modal-overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
 load();
+loadStocks().then(function(){refreshStockPrices();});
 </script>
 </body>
 </html>
